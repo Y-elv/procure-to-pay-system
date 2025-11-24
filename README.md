@@ -295,7 +295,14 @@ Update `.env` with production values:
 
 ## License
 
-This project is for educational/demonstration purposes.
+Copyright (c) 2025 Y-elv
+
+Permission is granted to use this software only. For copying, modifying, or distributing this software, you must request and obtain permission from the copyright holder. This software is provided "as is" without warranty of any kind.
+
+**Open Source Usage**: This software is open to open source use, but permission must be requested and obtained before use. When using this software in open source projects, you must:
+- Request permission from the copyright holder
+- Include proper attribution and copyright notice
+- Copy and maintain this license notice in all copies or substantial portions of the software
 
 ## Support
 
