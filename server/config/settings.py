@@ -12,7 +12,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this-in-production')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
@@ -72,18 +72,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # Supports both local PostgreSQL and Neon PostgreSQL
-# For Neon: Set DB_HOST to your Neon endpoint and ensure SSL is enabled
+# For Neon: Set DATABASE_HOST to your Neon endpoint and ensure SSL is enabled
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'procure_to_pay'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
+        'NAME': os.getenv('DATABASE_NAME', 'procure_to_pay'),
+        'USER': os.getenv('DATABASE_USER', 'postgres'),
+        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'postgres'),
+        'HOST': os.getenv('DATABASE_HOST', 'localhost'),
+        'PORT': os.getenv('DATABASE_PORT', '5432'),
         'OPTIONS': {
             # SSL is required for Neon PostgreSQL
-            'sslmode': 'require' if 'neon.tech' in os.getenv('DB_HOST', '') else 'prefer',
+            'sslmode': os.getenv('DATABASE_SSLMODE', 'prefer'),
+            'channel_binding': os.getenv('DATABASE_CHANNEL_BINDING', 'prefer'),
         },
     }
 }
