@@ -198,12 +198,13 @@ SWAGGER_SETTINGS = {
         'drf_yasg.inspectors.SimpleFieldInspector',
         'drf_yasg.inspectors.StringDefaultFieldInspector',
     ],
-    # Hide server selector and base URL
+    # Swagger UI configuration - ensure servers and authorize are visible
     'DEFAULT_SWAGGER_UI_CONFIG': {
         'displayRequestDuration': True,
         'filter': True,
         'showExtensions': True,
         'showCommonExtensions': True,
+        'persistAuthorization': True,
     },
 }
 
