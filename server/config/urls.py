@@ -8,43 +8,15 @@ from django.conf.urls.static import static
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
+from django.http import JsonResponse
+import json
 
+# Create schema view
 schema_view = get_schema_view(
     openapi.Info(
         title="Procure-to-Pay API",
         default_version='v1',
-        description="""
-        # Procure-to-Pay System API Documentation
-        
-        Complete REST API for managing purchase requests, approvals, and receipts.
-        
-        ## Authentication
-        Most endpoints require JWT authentication. Register or login to get your access token.
-        
-        ## User Roles
-        - **staff**: Create and manage own purchase requests
-        - **approver_level_1**: First-level approval authority
-        - **approver_level_2**: Second-level approval authority  
-        - **finance**: View all requests and validate receipts
-        
-        ## Base URL
-        All API endpoints are prefixed with `/api/`
-        
-        ## Workflow
-        1. Staff creates purchase request
-        2. Level 1 Approver reviews and approves/rejects
-        3. Level 2 Approver reviews and approves/rejects
-        4. If both approve → Request is approved → PO generated
-        5. Staff submits receipt
-        6. Finance validates receipt against PO
-        """,
-        terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(
-            name="API Support",
-            email="contact@procuretopay.local",
-            url="https://procuretopay.local"
-        ),
-        license=openapi.License(name="BSD License"),
+        description="API documentation for Procure-to-Pay system",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
@@ -54,15 +26,76 @@ schema_view = get_schema_view(
     ],
 )
 
+# Custom view to remove servers from OpenAPI JSON
+def schema_json_no_servers(request):
+    """Return OpenAPI schema without servers to hide base URL."""
+    response = schema_view.without_ui(cache_timeout=0)(request)
+    if response.status_code == 200:
+        try:
+            schema = json.loads(response.content)
+            # Remove servers to hide base URL display
+            schema.pop('servers', None)
+            return JsonResponse(schema, json_dumps_params={'indent': 2})
+        except (json.JSONDecodeError, KeyError, AttributeError):
+            pass
+    return response
+
+# Custom Swagger UI view that hides base URL/server selector
+def swagger_ui_no_base_url(request):
+    """Swagger UI with hidden base URL/server selector."""
+    from django.http import HttpResponse
+    
+    # Get the base Swagger UI response
+    base_response = schema_view.with_ui('swagger', cache_timeout=0)(request)
+    
+    # Render the response if it's a TemplateResponse
+    if hasattr(base_response, 'render'):
+        base_response = base_response.render()
+    
+    if hasattr(base_response, 'content'):
+        # Inject CSS and JavaScript to hide server selector and base URL
+        hide_script = """
+        <style>
+            .swagger-ui .scheme-container,
+            .swagger-ui .info .base-url,
+            .swagger-ui .scheme-container .schemes,
+            .swagger-ui .info .title small pre,
+            .swagger-ui .info .title small {
+                display: none !important;
+            }
+            .swagger-ui .info .title {
+                margin-bottom: 0 !important;
+            }
+        </style>
+        <script>
+            window.addEventListener('load', function() {
+                // Hide server selector
+                var serverContainer = document.querySelector('.scheme-container');
+                if (serverContainer) serverContainer.style.display = 'none';
+                // Hide base URL in info section
+                var baseUrl = document.querySelector('.info .base-url');
+                if (baseUrl) baseUrl.style.display = 'none';
+            });
+        </script>
+        """
+        try:
+            content = base_response.content.decode('utf-8')
+            content = content.replace('</head>', hide_script + '</head>')
+            return HttpResponse(content, content_type='text/html')
+        except (UnicodeDecodeError, AttributeError):
+            pass
+    
+    return base_response
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('core.urls')),
     path('api/requests/', include('requests.urls')),
     # Swagger/OpenAPI documentation
-    path('api-doc/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('api-doc/', swagger_ui_no_base_url, name='schema-swagger-ui'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui-alt'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-    path('api/openapi/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    path('api/openapi/', schema_json_no_servers, name='schema-json'),
 ]
 
 if settings.DEBUG:

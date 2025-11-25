@@ -198,5 +198,12 @@ SWAGGER_SETTINGS = {
         'drf_yasg.inspectors.SimpleFieldInspector',
         'drf_yasg.inspectors.StringDefaultFieldInspector',
     ],
+    # Hide server selector and base URL
+    'DEFAULT_SWAGGER_UI_CONFIG': {
+        'displayRequestDuration': True,
+        'filter': True,
+        'showExtensions': True,
+        'showCommonExtensions': True,
+    },
 }
 
