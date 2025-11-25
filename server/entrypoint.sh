@@ -1,30 +1,52 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 echo "Waiting for PostgreSQL to be ready..."
 
-# Wait for PostgreSQL (Neon / any remote DB)
 if command -v pg_isready &> /dev/null; then
-    until pg_isready -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}"; do
-        echo "Waiting for PostgreSQL..."
-        sleep 2
-    done
+  until pg_isready -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}"; do
+    echo "Waiting for PostgreSQL..."
+    sleep 2
+  done
 else
-    echo "Warning: pg_isready not found, proceeding anyway..."
-    sleep 5
+  echo "Warning: pg_isready not found, proceeding after short wait..."
+  sleep 5
 fi
 
 echo "PostgreSQL is ready!"
 
-# Run Django migrations
 echo "Running migrations..."
 python manage.py migrate --noinput
 
-# Collect static files
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Start Gunicorn on Render's port using the active Python environment
-echo "Starting Gunicorn server..."
-# NOTE: replace `yourproject.wsgi` with your real WSGI module, e.g. `core.wsgi` or `config.wsgi`
-exec python -m gunicorn yourproject.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3
+# Determine WSGI module:
+# Priority: WSGI_MODULE env var -> derived from DJANGO_SETTINGS_MODULE -> fallback to config.wsgi
+if [ -z "${WSGI_MODULE:-}" ]; then
+  if [ -n "${DJANGO_SETTINGS_MODULE:-}" ]; then
+    WSGI_MODULE="${DJANGO_SETTINGS_MODULE%.*}.wsgi"
+  else
+    # try to parse manage.py for DJANGO_SETTINGS_MODULE
+    DJANGO_SETTINGS_MODULE=$(python - <<'PY'
+import re
+try:
+    text = open("manage.py").read()
+    m = re.search(r"DJANGO_SETTINGS_MODULE'\s*,\s*'([^']+)'", text) or re.search(r'DJANGO_SETTINGS_MODULE\"\s*,\s*\"([^"]+)\"', text)
+    if m:
+        print(m.group(1))
+except Exception:
+    pass
+PY
+)
+    if [ -n "${DJANGO_SETTINGS_MODULE}" ]; then
+      WSGI_MODULE="${DJANGO_SETTINGS_MODULE%.*}.wsgi"
+    fi
+  fi
+fi
+
+# Fallback if detection failed
+: "${WSGI_MODULE:=config.wsgi}"
+
+echo "Starting Gunicorn server using WSGI module: ${WSGI_MODULE}"
+exec python -m gunicorn "${WSGI_MODULE}:application" --bind 0.0.0.0:${PORT:-8000} --workers 3
