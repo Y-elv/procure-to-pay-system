@@ -1,27 +1,22 @@
 #!/bin/bash
-
 set -e
 
 echo "Waiting for PostgreSQL to be ready..."
-# Wait for PostgreSQL (using pg_isready if available, otherwise skip)
+
+# Wait for PostgreSQL (Neon / any remote DB)
 if command -v pg_isready &> /dev/null; then
-    until pg_isready -h ${DB_HOST:-db} -p ${DB_PORT:-5432} -U ${DB_USER:-postgres}; do
+    until pg_isready -h "${DATABASE_HOST}" -p "${DATABASE_PORT}" -U "${DATABASE_USER}"; do
         echo "Waiting for PostgreSQL..."
-        sleep 1
-    done
-elif command -v nc &> /dev/null; then
-    until nc -z ${DB_HOST:-db} ${DB_PORT:-5432}; do
-        echo "Waiting for PostgreSQL..."
-        sleep 1
+        sleep 2
     done
 else
-    echo "Warning: Cannot check PostgreSQL readiness. Proceeding anyway..."
+    echo "Warning: pg_isready not found, proceeding anyway..."
     sleep 5
 fi
 
 echo "PostgreSQL is ready!"
 
-# Run migrations
+# Run Django migrations
 echo "Running migrations..."
 python manage.py migrate --noinput
 
@@ -29,14 +24,6 @@ python manage.py migrate --noinput
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Create superuser if it doesn't exist (optional)
-# python manage.py shell << EOF
-# from core.models import User
-# if not User.objects.filter(username='admin').exists():
-#     User.objects.create_superuser('admin', 'admin@example.com', 'admin123', role='finance')
-# EOF
-
-# Start server
-echo "Starting Django server..."
-exec "$@"
-
+# Start Gunicorn on Render's port
+echo "Starting Gunicorn server..."
+exec gunicorn yourproject.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3
