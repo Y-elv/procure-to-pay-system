@@ -24,6 +24,7 @@ python manage.py migrate --noinput
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Start Gunicorn on Render's port
+# Start Gunicorn on Render's port using the active Python environment
 echo "Starting Gunicorn server..."
-exec gunicorn yourproject.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3
+# NOTE: replace `yourproject.wsgi` with your real WSGI module, e.g. `core.wsgi` or `config.wsgi`
+exec python -m gunicorn yourproject.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3
