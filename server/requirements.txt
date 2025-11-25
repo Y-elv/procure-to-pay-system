@@ -19,3 +19,6 @@ redis==5.0.1
 python-dotenv==1.0.0
 reportlab==4.0.7
 dj-database-url==2.1.0
+
+# Add gunicorn so the runtime binary/module is available
+gunicorn==20.1.0
