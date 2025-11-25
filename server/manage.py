@@ -44,8 +44,9 @@ def main():
                     # Only address specified, append port
                     sys.argv[2] = f"{sys.argv[2]}:{app_port}"
             
-            # Print startup message
+            # Print startup messages
             print(f"🚀 Django server is running on http://localhost:{app_port}")
+            print(f"📚 Swagger UI available at: http://127.0.0.1:{app_port}/api-doc/")
         
     except ImportError as exc:
         raise ImportError(
