@@ -10,6 +10,7 @@ from drf_yasg import openapi
 from rest_framework import permissions
 from django.http import JsonResponse
 import json
+import os
 
 # Create schema view
 schema_view = get_schema_view(
@@ -26,9 +27,13 @@ schema_view = get_schema_view(
     ],
 )
 
+# Get production domain from environment or use default
+PRODUCTION_DOMAIN = os.getenv('PRODUCTION_DOMAIN', 'my-production-domain.com')
+HTTP_PORT = os.getenv('HTTP_PORT', '8000')
+
 # Custom view to ensure servers are in OpenAPI JSON
 def schema_json_with_servers(request):
-    """Return OpenAPI schema with servers configured."""
+    """Return OpenAPI schema with servers configured for HTTP and HTTPS schemes."""
     response = schema_view.without_ui(cache_timeout=0)(request)
     if response.status_code == 200:
         try:
@@ -43,25 +48,22 @@ def schema_json_with_servers(request):
                 description = description.replace('fix-swagger-ui', '')
                 schema['info']['description'] = description.strip()
             
-            # Add multiple servers with HTTP and HTTPS schemes
+            # Configure servers for HTTP and HTTPS schemes
+            # HTTP uses localhost, HTTPS uses production domain
             schema['servers'] = [
                 {
-                    "url": "http://localhost:8200",
-                    "description": "HTTP - Development server"
+                    "url": f"http://localhost:{HTTP_PORT}",
+                    "description": "HTTP - Development server (localhost)"
                 },
                 {
-                    "url": "http://127.0.0.1:8200",
-                    "description": "HTTP - Local server"
-                },
-                {
-                    "url": "https://localhost:8200",
-                    "description": "HTTPS - Development server"
-                },
-                {
-                    "url": "https://127.0.0.1:8200",
-                    "description": "HTTPS - Local server"
+                    "url": f"https://{PRODUCTION_DOMAIN}",
+                    "description": "HTTPS - Production server"
                 }
             ]
+            
+            # Add schemes to support HTTP and HTTPS dropdown
+            schema['schemes'] = ['http', 'https']
+            
             return JsonResponse(schema, json_dumps_params={'indent': 2})
         except (json.JSONDecodeError, KeyError, AttributeError):
             pass
@@ -80,7 +82,16 @@ def swagger_ui_clean(request):
         base_response = base_response.render()
     
     if hasattr(base_response, 'content'):
-        # Inject CSS and JavaScript to customize Swagger UI
+        # Inject configuration and CSS/JavaScript to customize Swagger UI
+        config_script = f"""
+        <script>
+            // Swagger UI configuration
+            window.SWAGGER_CONFIG = {{
+                HTTP_PORT: '{HTTP_PORT}',
+                PRODUCTION_DOMAIN: '{PRODUCTION_DOMAIN}'
+            }};
+        </script>
+        """
         clean_script = """
         <style>
             /* Hide base URL display and all URL links at the top */
@@ -263,32 +274,96 @@ def swagger_ui_clean(request):
                     removeFormatFromSearch();
                 }, 1000);
                 
-                // Add multiple servers (HTTP and HTTPS) to the OpenAPI spec
-                setTimeout(function() {
+                // Configure HTTP and HTTPS schemes with proper server URLs
+                function configureSchemes() {
                     if (window.ui && window.ui.spec) {
                         var spec = window.ui.spec;
-                        // Always update servers to ensure we have HTTP and HTTPS options
+                        // Get configuration values
+                        var httpPort = (window.SWAGGER_CONFIG && window.SWAGGER_CONFIG.HTTP_PORT) || '8000';
+                        var productionDomain = (window.SWAGGER_CONFIG && window.SWAGGER_CONFIG.PRODUCTION_DOMAIN) || 'my-production-domain.com';
+                        
+                        // Set servers: HTTP uses localhost, HTTPS uses production domain
                         spec.servers = [
                             {
-                                url: 'http://localhost:8200',
-                                description: 'HTTP - Development server'
+                                url: 'http://localhost:' + httpPort,
+                                description: 'HTTP - Development server (localhost)'
                             },
                             {
-                                url: 'http://127.0.0.1:8200',
-                                description: 'HTTP - Local server'
-                            },
-                            {
-                                url: 'https://localhost:8200',
-                                description: 'HTTPS - Development server'
-                            },
-                            {
-                                url: 'https://127.0.0.1:8200',
-                                description: 'HTTPS - Local server'
+                                url: 'https://' + productionDomain,
+                                description: 'HTTPS - Production server'
                             }
                         ];
+                        
+                        // Ensure schemes are set for HTTP/HTTPS dropdown
+                        spec.schemes = ['http', 'https'];
+                        
+                        // Update the spec
                         window.ui.specActions.updateSpec(JSON.stringify(spec));
+                        
+                        // Ensure scheme selector is visible and functional
+                        var schemeContainer = document.querySelector('.scheme-container');
+                        if (schemeContainer) {
+                            schemeContainer.style.display = 'block';
+                            
+                            // Find or create scheme selector
+                            var schemeSelect = schemeContainer.querySelector('select');
+                            if (!schemeSelect) {
+                                // Create scheme selector if it doesn't exist
+                                schemeSelect = document.createElement('select');
+                                schemeSelect.className = 'scheme-selector';
+                                schemeContainer.appendChild(schemeSelect);
+                            }
+                            
+                            // Ensure both http and https options exist
+                            var hasHttp = false;
+                            var hasHttps = false;
+                            Array.from(schemeSelect.options).forEach(function(option) {
+                                if (option.value === 'http' || option.value.toLowerCase() === 'http') hasHttp = true;
+                                if (option.value === 'https' || option.value.toLowerCase() === 'https') hasHttps = true;
+                            });
+                            
+                            if (!hasHttp) {
+                                var httpOption = document.createElement('option');
+                                httpOption.value = 'http';
+                                httpOption.textContent = 'http';
+                                schemeSelect.appendChild(httpOption);
+                            }
+                            
+                            if (!hasHttps) {
+                                var httpsOption = document.createElement('option');
+                                httpsOption.value = 'https';
+                                httpsOption.textContent = 'https';
+                                schemeSelect.appendChild(httpsOption);
+                            }
+                            
+                            // Add change listener to update server URL based on selected scheme
+                            schemeSelect.addEventListener('change', function() {
+                                var selectedScheme = this.value;
+                                if (spec.servers && spec.servers.length > 0) {
+                                    if (selectedScheme === 'http') {
+                                        // Switch to HTTP server (localhost)
+                                        spec.servers[0].url = 'http://localhost:' + httpPort;
+                                        if (spec.servers.length > 1) {
+                                            spec.servers[1].url = 'http://localhost:' + httpPort;
+                                        }
+                                    } else if (selectedScheme === 'https') {
+                                        // Switch to HTTPS server (production)
+                                        spec.servers[0].url = 'https://' + productionDomain;
+                                        if (spec.servers.length > 1) {
+                                            spec.servers[1].url = 'https://' + productionDomain;
+                                        }
+                                    }
+                                    window.ui.specActions.updateSpec(JSON.stringify(spec));
+                                }
+                            });
+                        }
                     }
-                }, 1500);
+                }
+                
+                // Run configuration with delays to ensure UI is ready
+                setTimeout(configureSchemes, 1500);
+                setTimeout(configureSchemes, 2000);
+                setTimeout(configureSchemes, 3000);
                 
                 // Ensure servers section is visible
                 var serversSection = document.querySelector('.scheme-container');
@@ -317,8 +392,8 @@ def swagger_ui_clean(request):
             content = content.replace('git push --set-upstream origin fix-swagger-ui', '')
             content = content.replace('fix-swagger-Ui', '')
             content = content.replace('fix-swagger-ui', '')
-            # Inject the script
-            content = content.replace('</head>', clean_script + '</head>')
+            # Inject configuration and customization scripts
+            content = content.replace('</head>', config_script + clean_script + '</head>')
             return HttpResponse(content, content_type='text/html')
         except (UnicodeDecodeError, AttributeError):
             pass
